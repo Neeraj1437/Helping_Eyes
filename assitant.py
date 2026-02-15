@@ -8,201 +8,250 @@ import subprocess
 from dotenv import load_dotenv
 from PIL import Image
 from ultralytics import YOLO
+import re
 
-# --- CONFIGURATION ---
+# ================= CONFIG =================
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
+PHONE_IP = os.getenv("PHONE_IP")
 
-if not API_KEY:
-    print("Error: API_KEY is missing.")
+if not API_KEY or not PHONE_IP:
+    print("API_KEY or PHONE_IP missing in .env")
     exit()
 
-# 1. SETUP GEMINI
+# ================= GEMINI =================
 genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+model = genai.GenerativeModel("gemini-2.5-flash")
 
-# 2. SETUP YOLO
-print("Loading AI Vision Model...")
-finder_ai = YOLO('yolov8n.pt') 
+# ================= YOLO =================
+finder_ai = YOLO("yolov8n.pt")
+TARGET_CLASSES = [73]  # book
 
-# --- AUDIO SYSTEM ---
+# ================= SPEECH =================
+is_speaking = False
+speech_lock = threading.Lock()
+
 def speak(text):
-    clean_text = text.replace('*', '').replace('#', '').replace('_', '')
-    print(f"🗣️ {clean_text[:100]}...") 
-    
-    def _run():
-        safe_text = clean_text.translate(str.maketrans({
-            '"': '', "'": '', '’': '', '‘': '', '`': '', '\n': ' '
-        }))
-        cmd = f'PowerShell -Command "Add-Type –AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak(\'{safe_text}\');"'
-        try:
-            subprocess.run(cmd, shell=True) 
-        except Exception as e:
-            print(f"Audio Error: {e}")
-            
-    threading.Thread(target=_run).start()
+    global is_speaking
+    with speech_lock:
+        is_speaking = True
 
-def analyze_image(frame):
-    speak("Hold on. Reading.")
-    
-    # Resize for upload speed
-    height, width = frame.shape[:2]
-    if width > 1024:
-        ratio = 1024 / width
-        frame = cv2.resize(frame, (1024, int(height * ratio)))
+    clean = text.replace("*", "").replace("#", "").replace("_", "")
+    print(f"🗣️ {clean[:120]}")
+
+    def _run():
+        global is_speaking
+        safe = clean.translate(str.maketrans({
+            '"': "", "'": "", "’": "", "‘": "", "`": "", "\n": " "
+        }))
+        cmd = (
+            "PowerShell -Command "
+            "\"Add-Type –AssemblyName System.Speech; "
+            f"(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('{safe}');\""
+        )
+        subprocess.run(cmd, shell=True)
+        with speech_lock:
+            is_speaking = False
+
+    threading.Thread(target=_run, daemon=True).start()
+
+# ================= TEXT UTILITIES =================
+def normalize_text(text):
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9\s]", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+def text_similarity(t1, t2):
+    if not t1 or not t2:
+        return 0.0
+    w1 = set(normalize_text(t1).split())
+    w2 = set(normalize_text(t2).split())
+    if not w1 or not w2:
+        return 0.0
+    return len(w1 & w2) / len(w1 | w2)
+
+def extract_new_text(new_text, old_text):
+    new_words = normalize_text(new_text).split()
+    old_words = set(normalize_text(old_text).split())
+    unique_words = [w for w in new_words if w not in old_words]
+    if len(unique_words) < 5:
+        return ""
+    return " ".join(unique_words)
+
+# ================= ANALYSIS =================
+IGNORE_THRESHOLD = 0.96
+PARTIAL_THRESHOLD = 0.80
+
+def analyze_image(frame, last_text):
+    # HARD SPEECH GATE (absolute protection)
+    while is_speaking:
+        time.sleep(0.05)
+
+    speak("Reading")
+
+    h, w = frame.shape[:2]
+    if w > 1024:
+        frame = cv2.resize(frame, (1024, int(h * (1024 / w))))
 
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(rgb)
-    
+
     try:
-        # We ask Gemini specifically to provide clean text
-        prompt = "Read all the text in this image clearly. Output only the text found."
+        prompt = (
+            "Extract all visible text exactly as seen. "
+            "Do not summarize or infer."
+        )
         response = model.generate_content([prompt, pil_img])
-        
-        if response.text:
-            # --- NEW CMD PRINTING LOGIC ---
-            print("\n" + "="*50)
-            print("EXTRACTED TEXT:")
-            print("-" * 50)
-            print(response.text) # This prints the FULL text to CMD
-            print("="*50 + "\n")
-            # ------------------------------
-            
-            speak(response.text)
+
+        if not response.text or len(response.text.strip()) < 10:
+            # DO NOT SPEAK HERE (silent failure)
+            return last_text
+
+        new_text = response.text.strip()
+        sim = text_similarity(new_text, last_text)
+
+        print(f"\nSimilarity score: {sim:.2f}")
+
+        # -------- CASE 1: Almost identical --------
+        if sim >= IGNORE_THRESHOLD:
+            speak("Same content. No new text.")
+            return last_text
+
+        # -------- CASE 2: Partial overlap --------
+        elif PARTIAL_THRESHOLD <= sim < IGNORE_THRESHOLD:
+            delta = extract_new_text(new_text, last_text)
+            if delta:
+                speak("New text detected.")
+                speak(delta)
+                return last_text + " " + delta
+            else:
+                speak("No significant new text.")
+                return last_text
+
+        # -------- CASE 3: New content --------
         else:
-            print("No text detected by Gemini.")
-            speak("No text found.")
+            speak(new_text)
+            return new_text
+
     except Exception as e:
-        print(f"Error: {e}")
-        speak("Connection lost.")
-        
+        print("Gemini error:", e)
+        # DO NOT SPEAK HERE
+        return last_text
+
+# ================= MAIN =================
 def main():
-    phone_ip = os.getenv("PHONE_IP")
-
-    if not phone_ip:
-        print("Error: PHONE_IP is missing in .env file.")
-        return
-
-    phone_ip_url = f"http://{phone_ip}:8080/video"
-    print(f"Connecting to camera at: {phone_ip_url}")
-
-    cap = cv2.VideoCapture(phone_ip_url)
-
+    cap = cv2.VideoCapture(f"http://{PHONE_IP}:8080/video")
     if not cap.isOpened():
-        print("Error: Could not connect to the phone. Check if both devices are on the same Wi-Fi.")
+        print("Camera not accessible")
         return
 
+    speak("System online. Show me a book.")
 
-    speak("System Online. Show me a book.")
-    
     last_guidance_time = 0
-    stable_start_time = 0
+    stable_start = 0
     is_stable = False
-    
-    # TARGET: Book (73)
-    TARGET_CLASSES = [73] 
+    last_text = ""
+
+    HOLD_TIME = 0.7
+    TOLERANCE = 100
+    MICRO_TOL = 40
 
     while True:
         ret, frame = cap.read()
-        if not ret: break
+        if not ret:
+            break
 
-        display_frame = cv2.flip(frame, 1)
-        
-        # Run AI on CPU (Avoids 5080 error)
-        results = finder_ai(display_frame, verbose=False, conf=0.3, device='cpu') 
-        
-        target_found = False
-        
+        display = cv2.flip(frame, 1)
+
+        # Vision loop pauses while speaking
+        if is_speaking:
+            cv2.putText(display, "Reading...",
+                        (50, 80), cv2.FONT_HERSHEY_SIMPLEX,
+                        1.2, (0, 255, 255), 3)
+            cv2.imshow("Smart Reader", display)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+            continue
+
+        results = finder_ai(display, conf=0.3, verbose=False, device="cpu")
+        found = False
+
         for r in results:
             for box in r.boxes:
                 if int(box.cls[0]) in TARGET_CLASSES:
-                    target_found = True
-                    
+                    found = True
+
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    
-                    # Draw Box
-                    cv2.rectangle(display_frame, (x1, y1), (x2, y2), (255, 100, 0), 3)
-                    
-                    # --- CALCULATE CENTERS ---
-                    obj_center_x = (x1 + x2) // 2
-                    obj_center_y = (y1 + y2) // 2
-                    
-                    frame_center_x = display_frame.shape[1] // 2
-                    frame_center_y = display_frame.shape[0] // 2
-                    
-                    offset_x = obj_center_x - frame_center_x
-                    offset_y = obj_center_y - frame_center_y
-                    
-                    # Check Size (Is it too far?)
-                    box_area = (x2 - x1) * (y2 - y1)
-                    frame_area = display_frame.shape[0] * display_frame.shape[1]
-                    coverage = box_area / frame_area
-                    
-                    # --- GUIDANCE LOGIC ---
-                    TOLERANCE = 100 # Pixels
-                    
-                    msg = "Aligning..."
-                    is_centered = True
-                    
-                    # 1. Horizontal Check
-                    if abs(offset_x) > TOLERANCE:
-                        is_centered = False
-                        if time.time() - last_guidance_time > 2.5:
-                            if offset_x > 0: speak("Move Left") 
-                            else: speak("Move Right")
+                    cv2.rectangle(display, (x1, y1), (x2, y2), (255, 100, 0), 3)
+
+                    cx = (x1 + x2) // 2
+                    cy = (y1 + y2) // 2
+                    fx = display.shape[1] // 2
+                    fy = display.shape[0] // 2
+
+                    offx = cx - fx
+                    offy = cy - fy
+
+                    area = (x2 - x1) * (y2 - y1)
+                    coverage = area / (display.shape[0] * display.shape[1])
+
+                    centered = True
+
+                    if abs(offx) > TOLERANCE + MICRO_TOL:
+                        centered = False
+                        if time.time() - last_guidance_time > 2:
+                            speak("Move Left" if offx > 0 else "Move Right")
                             last_guidance_time = time.time()
-                            
-                    # 2. Vertical Check (Only if X is okay-ish)
-                    elif abs(offset_y) > TOLERANCE:
-                        is_centered = False
-                        if time.time() - last_guidance_time > 2.5:
-                            # Note: Y coordinates grow downwards
-                            if offset_y > 0: speak("Move Up")  # Object is low -> Move Up
-                            else: speak("Move Down")           # Object is high -> Move Down
+
+                    elif abs(offy) > TOLERANCE + MICRO_TOL:
+                        centered = False
+                        if time.time() - last_guidance_time > 2:
+                            speak("Move Up" if offy > 0 else "Move Down")
                             last_guidance_time = time.time()
-                    
-                    # 3. Distance Check
-                    elif coverage < 0.15: # If book covers less than 15% of screen
-                        is_centered = False
-                        if time.time() - last_guidance_time > 2.5:
+
+                    elif coverage < 0.15:
+                        centered = False
+                        if time.time() - last_guidance_time > 2:
                             speak("Bring Closer")
                             last_guidance_time = time.time()
 
-                    # --- SUCCESS STATE ---
-                    if is_centered:
+                    if centered:
                         if not is_stable:
                             is_stable = True
-                            stable_start_time = time.time()
-                        
-                        time_held = time.time() - stable_start_time
-                        
-                        if time_held < 2.0:
-                            msg = f"HOLD STILL: {2.0 - time_held:.1f}s"
-                            color = (0, 255, 255)
+                            stable_start = time.time()
+
+                        held = time.time() - stable_start
+
+                        if held < HOLD_TIME:
+                            cv2.putText(display,
+                                        f"HOLD STILL {HOLD_TIME-held:.1f}s",
+                                        (50, 100),
+                                        cv2.FONT_HERSHEY_SIMPLEX,
+                                        1.2, (0, 255, 255), 3)
                         else:
-                            msg = "CAPTURING..."
-                            color = (0, 255, 0)
-                        
-                        cv2.putText(display_frame, msg, (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
-                        
-                        if time_held >= 2.0:
-                            # Send RAW frame (Unflipped)
-                            analyze_image(frame) 
+                            cv2.putText(display, "CAPTURING",
+                                        (50, 100),
+                                        cv2.FONT_HERSHEY_SIMPLEX,
+                                        1.2, (0, 255, 0), 3)
+
+                            last_text = analyze_image(frame, last_text)
                             is_stable = False
-                            stable_start_time = 0
-                            time.sleep(5) 
-                            speak("Ready.")
                     else:
                         is_stable = False
-                    
-                    break # Found book, stop checking
 
-        if not target_found:
-             is_stable = False
-             cv2.putText(display_frame, "Searching...", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    break
 
-        cv2.imshow("Smart Reader", display_frame)
-        if cv2.waitKey(1) == ord('q'): break
+        if not found:
+            is_stable = False
+            cv2.putText(display, "Searching...",
+                        (50, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0, 0, 255), 2)
+
+        cv2.imshow("Smart Reader", display)
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
 
     cap.release()
     cv2.destroyAllWindows()
