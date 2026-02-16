@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 from PIL import Image
 from ultralytics import YOLO
 import re
+import speech_recognition as sr
+import sounddevice as sd
+import queue
 
 # ================= CONFIG =================
 load_dotenv()
@@ -31,6 +34,10 @@ TARGET_CLASSES = [73]  # book
 is_speaking = False
 speech_lock = threading.Lock()
 
+# ================= VOICE CONTROL =================
+stop_requested = False
+audio_queue = queue.Queue()
+
 def speak(text):
     global is_speaking
     with speech_lock:
@@ -44,16 +51,50 @@ def speak(text):
         safe = clean.translate(str.maketrans({
             '"': "", "'": "", "’": "", "‘": "", "`": "", "\n": " "
         }))
-        cmd = (
-            "PowerShell -Command "
-            "\"Add-Type –AssemblyName System.Speech; "
-            f"(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('{safe}');\""
-        )
-        subprocess.run(cmd, shell=True)
+
+        # cmd = (
+        #     "PowerShell -Command "
+        #     "\"Add-Type –AssemblyName System.Speech; "
+        #     f"(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('{safe}');\""
+        # )
+
+        process = subprocess.Popen(["say", safe])
+        process.wait()
         with speech_lock:
             is_speaking = False
-
     threading.Thread(target=_run, daemon=True).start()
+def listen_for_commands():
+    global stop_requested
+
+    recognizer = sr.Recognizer()
+
+    def audio_callback(indata, frames, time_info, status):
+        audio_queue.put(bytes(indata))
+
+    with sd.RawInputStream(samplerate=16000,
+                           blocksize=8000,
+                           dtype='int16',
+                           channels=1,
+                           callback=audio_callback):
+
+        while True:
+            try:
+                audio_data = audio_queue.get()
+                audio = sr.AudioData(audio_data, 16000, 2)
+
+                command = recognizer.recognize_google(audio).lower()
+                print("Heard:", command)
+
+                if "stop" in command:
+                    subprocess.run(["killall", "say"])
+                    stop_requested = True
+
+                if "next page" in command:
+                    subprocess.run(["killall", "say"])
+                    stop_requested = True
+
+            except Exception:
+                pass
 
 # ================= TEXT UTILITIES =================
 def normalize_text(text):
@@ -141,6 +182,7 @@ def analyze_image(frame, last_text):
 
 # ================= MAIN =================
 def main():
+    global stop_requested
     cap = cv2.VideoCapture(f"http://{PHONE_IP}:8080/video")
     if not cap.isOpened():
         print("Camera not accessible")
@@ -148,14 +190,17 @@ def main():
 
     speak("System online. Show me a book.")
 
+    # Start voice command listener
+    threading.Thread(target=listen_for_commands, daemon=True).start()
+
     last_guidance_time = 0
     stable_start = 0
     is_stable = False
     last_text = ""
 
-    HOLD_TIME = 0.7
-    TOLERANCE = 100
-    MICRO_TOL = 40
+    HOLD_TIME = 0.3
+    TOLERANCE = 200
+    MICRO_TOL = 10
 
     while True:
         ret, frame = cap.read()
@@ -235,7 +280,11 @@ def main():
                                         cv2.FONT_HERSHEY_SIMPLEX,
                                         1.2, (0, 255, 0), 3)
 
-                            last_text = analyze_image(frame, last_text)
+                            if stop_requested:
+                                last_text = ""
+                                stop_requested = False
+                            else:
+                                last_text = analyze_image(frame, last_text)
                             is_stable = False
                     else:
                         is_stable = False
