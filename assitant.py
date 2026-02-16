@@ -163,7 +163,7 @@ def main():
             break
 
         display = cv2.flip(frame, 1)
-
+        display = cv2.resize(display, (960, 540)) 
         # Vision loop pauses while speaking
         if is_speaking:
             cv2.putText(display, "Reading...",
