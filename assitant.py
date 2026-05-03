@@ -37,9 +37,11 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 
 # ================= API CONTROL =================
 LAST_API_CALL = 0
-API_COOLDOWN = 3
+API_COOLDOWN = 10
 MAX_RETRIES = 3
 RETRY_DELAY = 2
+LAST_SUCCESSFUL_READ = 0
+MIN_READ_INTERVAL = 15  # seconds
 
 # ================= YOLO =================
 finder_ai = YOLO("yolov8n.pt")
@@ -291,6 +293,11 @@ def analyze_image(frame: np.ndarray, last_text: str) -> str:
     Analyze image with Gemini API with robust error handling
     """
     global LAST_API_CALL, _force_next_capture
+    global LAST_SUCCESSFUL_READ
+
+    if time.time() - LAST_SUCCESSFUL_READ < MIN_READ_INTERVAL:
+        logger.info("⏳ Read interval active")
+        return last_text
 
     max_wait = 0
     while is_speaking and max_wait < 30:
@@ -336,6 +343,7 @@ def analyze_image(frame: np.ndarray, last_text: str) -> str:
             
             if resp and resp.text and len(resp.text.strip()) >= 5:
                 text = resp.text.strip()
+                LAST_SUCCESSFUL_READ = time.time()
                 logger.info(f"✅ OCR successful (attempt {attempt + 1})")
                 break
             else:
@@ -346,8 +354,9 @@ def analyze_image(frame: np.ndarray, last_text: str) -> str:
             logger.error(f"❌ API error (attempt {attempt + 1}): {error_str[:100]}")
             
             if "429" in error_str or "quota" in error_str.lower():
-                speak("API limit reached. Waiting...")
-                time.sleep(RETRY_DELAY * (attempt + 2))
+                logger.error("❌ Gemini rate limit hit")
+                speak("API rate limit reached")
+                return last_text
             elif "500" in error_str or "503" in error_str:
                 speak("Service temporarily unavailable. Retrying...")
                 time.sleep(RETRY_DELAY)
@@ -523,7 +532,7 @@ def main():
 
     stable_start = 0
     is_stable = False
-    HOLD_TIME = 0.4
+    HOLD_TIME = 0.15
     
     # ================= GUIDE BOX CONFIG =================
     DISPLAY_W, DISPLAY_H = 960, 540
@@ -707,3 +716,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
