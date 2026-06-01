@@ -80,7 +80,7 @@ The entire pipeline runs with minimal user interaction, making the device highly
 
 The end-to-end pipeline follows a linear flow from image capture to audio output:
 
-![System Architecture Diagram](Design/images/Architecture diagram.png)
+![System Architecture Diagram](Design/images/Architecture_diagram.png)
 
 ---
 
@@ -116,26 +116,17 @@ The Fusion 360 enclosure houses all electronics and is designed to be 3D-printed
 
 | View | Image |
 |---|---|
-| Front View | *(add `docs/images/fusion360_front.png` here)* |
-| Side View | *(add `docs/images/fusion360_side.png` here)* |
-| Isometric View | *(add `docs/images/fusion360_iso.png` here)* |
-| Exploded View | *(add `docs/images/fusion360_exploded.png` here)* |
+| Assembled Device | <img src="Design/images/assembled.png" width="300"> |
+| Internal Circuit | <img src="Design/images/internal_circuit.png" width="300"> |
+| Circuit Inside the Case | <img src="Design/images/module_hosted.png" width="300"> |
 
-To add your own renders, export images from Fusion 360 and place them in the `docs/images/` folder, then update the table above.
-
-**Example (once images are added):**
-
-```markdown
-| Front View | ![Front](docs/images/fusion360_front.png) |
-| Side View  | ![Side](docs/images/fusion360_side.png)  |
-```
 
 ### Assembled Device
 
-| Photo | Description |
-|---|---|
-| *(add `docs/images/device_assembled.jpg`)* | Fully assembled device with ESP32-CAM mounted |
-| *(add `docs/images/device_wearable.jpg`)* | Device worn by a user during testing |
+Fully assembled and 3D printed device with ESP32-CAM mounted
+
+<img src="Design\images\final_module.jpeg" width="500"> 
+
 
 ### Component Layout
 
