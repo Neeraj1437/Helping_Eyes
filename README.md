@@ -80,30 +80,7 @@ The entire pipeline runs with minimal user interaction, making the device highly
 
 The end-to-end pipeline follows a linear flow from image capture to audio output:
 
-```
-Printed Document
-      │
-      ▼
-ESP32-CAM (Image Acquisition)
-      │
-      ▼
-Image Processing & Enhancement (OpenCV)
-      │
-      ▼
-Document Detection (boundary / contour detection)
-      │
-      ▼
-VLM Model — Text Extraction (Qwen3-VI-8B / Google Gemini)
-      │
-      ▼
-Extracted Text
-      │
-      ▼
-Text-to-Speech (TTS)
-      │
-      ▼
-Audio Output (Speaker / Earphone)
-```
+![System Architecture Diagram](Design/images/Architecture diagram.png)
 
 ---
 
@@ -197,28 +174,7 @@ The 3D-printed module integrates:
 
 ---
 
-## Repository Structure
 
-```
-helping-eyes/
-├── assitant.py                        # Gemini-cloud reader (simple version)
-├── smart_reader_qwen_detection_fix.py # Full local Qwen pipeline with hybrid detection
-├── test_hybrid.py                     # Experimental hybrid detection utilities
-├── yolov8n.pt                         # YOLOv8 nano weights (required, keep in root)
-├── requirment.txt                     # Python dependency list
-├── .env                               # Environment variables (create this — see below)
-├── docs/
-│   └── images/                        # ← Place Fusion 360 renders and device photos here
-│       ├── fusion360_front.png
-│       ├── fusion360_side.png
-│       ├── fusion360_iso.png
-│       ├── fusion360_exploded.png
-│       ├── device_assembled.jpg
-│       └── device_wearable.jpg
-└── README.md
-```
-
----
 
 ## Environment Setup
 
