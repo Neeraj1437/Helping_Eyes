@@ -1,9 +1,7 @@
 # Helping Eyes — Computer Vision-Based Document Reading System for the Visually Impaired
 
 > **Mini Project (CS3905) — RV University, School of Computer Science and Engineering**
->
-> **Project Guide:** Prof. Prashant Adhikari, Assistant Professor
->
+
 > **Team Members:**
 > | Roll No. | Name |
 > |---|---|
