@@ -264,18 +264,6 @@ Total end-to-end latency is approximately **~11.3 seconds** per document read. T
 
 ---
 
-## Testing & Validation
-
-Three levels of testing were performed:
-
-**Unit Testing** — Each module (camera capture, document detection, image preprocessing, VLM text extraction, speech generation) was tested in isolation to verify correct individual behaviour and expected output format.
-
-**Integration Testing** — The communication between modules was validated end-to-end: ESP32-CAM → OpenCV preprocessing → VLM text extraction → TTS conversion, ensuring data passed cleanly across every boundary.
-
-**System Testing** — The complete Helping Eyes pipeline was evaluated on real printed documents under realistic conditions (varying lighting, distances, and document types) to measure document detection rate, text extraction quality, and audio output clarity.
-
----
-
 ## Innovations
 
 ### 1. Vision Language Models Instead of Traditional OCR
@@ -286,27 +274,6 @@ A purpose-built enclosure was designed in Fusion 360 and 3D-printed to create a 
 
 ### 3. Autonomous Document Reading Pipeline
 The system detects, enhances, extracts, and reads aloud with minimal user interaction. No button presses or menu navigation are required — the device identifies when a document is in view and begins reading automatically, making it genuinely accessible for users with no or limited vision.
-
----
-
-## Future Work
-
-- **Improved low-light performance** — enhanced image capture with IR support or adaptive exposure tuning for challenging lighting and blurred/complex backgrounds.
-- **Multilingual support** — extend TTS and VLM prompting to handle regional Indian languages (Kannada, Hindi, Tamil, etc.) and other international scripts.
-- **Custom fine-tuned detection model** — train a domain-specific document detector to improve accuracy and reduce latency compared to the general-purpose YOLOv8 baseline.
-- **Mobile app connectivity** — a companion smartphone app for remote monitoring, configuration, and speech relay over Bluetooth.
-- **On-device inference** — explore lighter VLMs (e.g. Qwen-0.5B, moondream2) suitable for running directly on a Raspberry Pi Zero 2W to eliminate the Wi-Fi dependency.
-
----
-
-## Literature Survey
-
-| Title | Authors | Year | Methodology | Key Features | Limitations |
-|---|---|---|---|---|---|
-| Novel ML-based Text-To-Speech Device for Visually Impaired | U. Gawande et al. | 2023 | Raspberry Pi + Camera, OCR, TTS | Portable, low-cost | OCR accuracy depends on image quality |
-| Smart Reader for Blind People | Deepti S R et al. | 2023 | Raspberry Pi, 5MP camera, offline pyttsx3 TTS | Offline TTS, Kannada + English | High processing time (~26 s), accuracy drops on blur |
-| Assistive Reading System using OCR and TTS | Akshay Sharma et al. | 2014 | OCR with connected component labelling, concatenative synthesis TTS | Printed text to speech, saveable audio | Printed text only, quality depends on image |
-| EasyOCR: Ready-to-use OCR with Deep Learning | JaidedAI | 2020 | Deep learning OCR | Multi-language text extraction | Performance degrades on blurred images |
 
 ---
 
@@ -332,7 +299,3 @@ The system detects, enhances, extracts, and reads aloud with minimal user intera
 | No speech output | Confirm Windows SAPI is installed. On Linux/macOS, replace the TTS backend with `espeak` or `pyttsx3` with a compatible driver. |
 | `yolov8n.pt` not found | The weights file must be present in the project root. Download from [Ultralytics](https://github.com/ultralytics/assets/releases) if missing. |
 | Very slow VLM inference | Use a GPU if available. Alternatively switch to the Gemini cloud API for faster response times. |
-
----
-
-*Helping Eyes — School of Computer Science and Engineering, RV University, Bangalore.*
