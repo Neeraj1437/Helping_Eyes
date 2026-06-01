@@ -16,12 +16,9 @@
 12. [Running the System](#running-the-system)
 13. [Usage & Controls](#usage--controls)
 14. [Performance & Evaluation](#performance--evaluation)
-15. [Testing & Validation](#testing--validation)
-16. [Innovations](#innovations)
-17. [Future Work](#future-work)
-18. [Literature Survey](#literature-survey)
-19. [References](#references)
-20. [Troubleshooting](#troubleshooting)
+15. [Innovations](#innovations)
+16. [References](#references)
+27. [Troubleshooting](#troubleshooting)
 
 ---
 
