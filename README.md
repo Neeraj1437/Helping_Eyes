@@ -1,17 +1,5 @@
 # Helping Eyes — Computer Vision-Based Document Reading System for the Visually Impaired
 
-> **Mini Project (CS3905) — RV University, School of Computer Science and Engineering**
-
-> **Team Members:**
-> | Roll No. | Name |
-> |---|---|
-> | 1RVU23CSE304 | Neeraj Rajiv Shivam |
-> | 1RVU23CSE504 | Tanmay M S |
-> | 1RVU23CSE098 | Ayush R |
-> | 1RVU23CSE503 | Tanmay |
-
----
-
 ## Table of Contents
 
 1. [Problem Statement](#problem-statement)
